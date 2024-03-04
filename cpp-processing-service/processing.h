@@ -3,12 +3,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
-#include <stdio.h>
-int example(int a, int b);
-
 void scaleImage(char* imagePath, char* newImagePath, int newWidth, int newHeight);
+void quantizeImage(char* imagePath, char* newImagePath, int N);
 #ifdef __cplusplus
 }
 #endif

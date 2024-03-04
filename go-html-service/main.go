@@ -1,26 +1,23 @@
 package main
 
 import (
-    "net/http"
-    "io"
-    "fmt"
-    "os"
-    "strings"
-    "math/rand"
-    "time"
-    "github.com/gorilla/mux"
-    "github.com/redis/go-redis/v9"
+	"fmt"
+	"io"
+	"math/rand"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+	"unsafe"
+
+	"github.com/gorilla/mux"
+	"github.com/redis/go-redis/v9"
 )
 
-
-
-// #cgo LDFLAGS: -L/usr/lib -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs -lstdc++ -lm -L./ -lexample
-// #include "example.h"
+// #cgo LDFLAGS: -L../.
+// #include "../cpp-processing-service/task.h"
 import "C"
-
-func init() {
-    rand.Seed(time.Now().UnixNano())
-}
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
@@ -94,8 +91,34 @@ func main() {
         io.Copy(f, file)
 
         scaledFileName := strings.Split(fileName, ".")[0] + "-64x64." + strings.Split(fileName, ".")[1]
+        quantizedFileName := strings.Split(fileName, ".")[0] + "-quantized." + strings.Split(fileName, ".")[1]
 
-        C.scaleImage(C.CString(fileName), C.CString(scaledFileName), 64, 64)
+        task := C.makeTaskPackage(C.CString(fileName), C.CString(scaledFileName), C.CString(quantizedFileName),64, 64)
+
+        // call the scalling service on port 8989 using sockets
+        conn, err := net.Dial("tcp", "localhost:8989")
+        if err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+            return
+        }
+    
+
+        defer conn.Close()
+
+        encodedTask := C.encodeTask(task)
+        goEncodeTask := C.GoString(encodedTask)
+
+        conn.Write([]byte(goEncodeTask))
+
+        C.destroyTaskPackage(task)
+        C.free(unsafe.Pointer(encodedTask))
+        buf := make([]byte, 2048)
+        conn.Read(buf)
+
+        taskResponse := C.decodeTaskResult(C.CString(string(buf)))
+        fmt.Println("Task sucess: ", taskResponse.SUCCESS)
+        conn.Close()
+        C.destroyTaskResult(taskResponse)
 
         scaledFile, err := os.Open(scaledFileName)
         if err != nil {
@@ -109,7 +132,7 @@ func main() {
         client.Set(r.Context(), scaledFileName, scaledFileBytes, 0)
         
         w.Header().Set("Content-Type", "application/json")
-        w.Write([]byte(fmt.Sprintf(`{"original": "%s", "scaled": "%s"}`, fileName, scaledFileName)))
+        w.Write([]byte(fmt.Sprintf(`{"original": "%s", "scaled": "%s", "quantized": "%s"}`, fileName, scaledFileName, quantizedFileName)))
 
     })
 
