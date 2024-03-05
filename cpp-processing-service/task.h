@@ -20,67 +20,22 @@ struct TaskResult {
 };
 struct TaskPackage makeTaskPackage(char *imagePath, char *resizedImagePath,
                                    char *quantizedImagePath, int newWidth,
-                                   int newHeight) {
-  struct TaskPackage taskPackage = {.imagePath = imagePath,
-                                    .resizedImagePath = resizedImagePath,
-                                    .quantizedImagePath = quantizedImagePath,
-                                    .newWidth = newWidth,
-                                    .newHeight = newHeight};
-  return taskPackage;
-}
+                                   int newHeight);
 
-void destroyTaskPackage(struct TaskPackage taskPackage) {
-  free(taskPackage.imagePath);
-  free(taskPackage.resizedImagePath);
-  free(taskPackage.quantizedImagePath);
-}
+void destroyTaskPackage(struct TaskPackage taskPackage);
 
+char *encodeTask(struct TaskPackage taskPackage);
 
-char *encodeTask(struct TaskPackage taskPackage) {
-  char *buffer = (char *)malloc(2048 * sizeof(char));
-  sprintf(buffer, "%s %s %s %d %d", taskPackage.imagePath,
-          taskPackage.resizedImagePath, taskPackage.quantizedImagePath,
-          taskPackage.newWidth, taskPackage.newHeight);
-  return buffer;
-}
-
-struct TaskPackage decodeTask(char *buffer) {
-  struct TaskPackage t = {};
-  t.imagePath = (char *)malloc(2048 * sizeof(char));
-  t.resizedImagePath = (char *)malloc(2048 * sizeof(char));
-  t.quantizedImagePath = (char *)malloc(2048 * sizeof(char));
-  sscanf(buffer, "%s %s %s %d %d", t.imagePath, t.resizedImagePath,
-         t.quantizedImagePath, &t.newWidth, &t.newHeight);
-  return t;
-}
+struct TaskPackage decodeTask(char *buffer);
 
 struct TaskResult makeTaskResult(char *resizedImagePath,
-                                 char *quantizedImagePath, int SUCCESS) {
-  struct TaskResult taskResult = {.resizedImagePath = resizedImagePath,
-                                  .quantizedImagePath = quantizedImagePath,
-                                  .SUCCESS = SUCCESS};
-  return taskResult;
-}
+                                 char *quantizedImagePath, int SUCCESS);
 
-void destroyTaskResult(struct TaskResult taskResult) {
-  free(taskResult.resizedImagePath);
-  free(taskResult.quantizedImagePath);
-}
+void destroyTaskResult(struct TaskResult taskResult);
 
-char *encodeTaskResult(struct TaskResult t) {
-  char *buffer = (char *)malloc(2048 * sizeof(char));
-  sprintf(buffer, "%s %s %d", t.resizedImagePath, t.quantizedImagePath,
-          t.SUCCESS);
-  return buffer;
-}
+char *encodeTaskResult(struct TaskResult t);
 
-struct TaskResult decodeTaskResult(char *buffer) {
-  struct TaskResult t = {};
-  t.resizedImagePath = (char *)malloc(2048 * sizeof(char));
-  sscanf(buffer, "%s %s %d", t.resizedImagePath, t.quantizedImagePath,
-         &t.SUCCESS);
-  return t;
-}
+struct TaskResult decodeTaskResult(char *buffer);
 
 #ifdef __cplusplus
 }

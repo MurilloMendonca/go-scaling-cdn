@@ -15,7 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// #cgo LDFLAGS: -L../.
+// #cgo LDFLAGS: -L../cpp-processing-service/ -l:libtask.a
 // #include "../cpp-processing-service/task.h"
 import "C"
 
