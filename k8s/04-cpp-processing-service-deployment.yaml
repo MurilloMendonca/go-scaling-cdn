@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpp-processing-service-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpp-processing-service
+  template:
+    metadata:
+      labels:
+        app: cpp-processing-service
+    spec:
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: uploads-pvc
+      containers:
+      - name: cpp-processing-service
+        image: cpp-processing-service-image:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8989
+        volumeMounts:
+        - mountPath: "/app/uploads"
+          name: uploads
+

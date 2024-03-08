@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-html-service-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-html-service
+  template:
+    metadata:
+      labels:
+        app: go-html-service
+    spec:
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: uploads-pvc
+      containers:
+      - name: go-html-service
+        image: go-html-service-image:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 6969
+        env:
+        - name: CPP_SERVICE_HOST
+          value: cpp-processing-service
+        - name: CPP_SERVICE_PORT
+          value: "8989"
+        - name: REDIS_SERVICE_HOST
+          value: redis-service
+        - name: REDIS_SERVICE_PORT
+          value: "6379"
+        volumeMounts:
+        - mountPath: "/app/uploads"
+          name: uploads
+
