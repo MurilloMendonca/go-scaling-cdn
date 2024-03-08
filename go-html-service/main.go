@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/gorilla/mux"
+	"github.com/redis/go-redis/v9"
 	"io"
 	"math/rand"
 	"net"
@@ -9,51 +11,41 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unsafe"
-
-	"github.com/gorilla/mux"
-	"github.com/redis/go-redis/v9"
 )
-
-// #cgo LDFLAGS: -L../cpp-processing-service/ -l:libtask.a
-// #include "../cpp-processing-service/task.h"
-import "C"
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 func randSeq(n int) string {
-    b := make([]rune, n)
-    for i := range b {
-        b[i] = letters[rand.Intn(len(letters))]
-    }
-    return string(b)
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
 func main() {
-    client := redis.NewClient(&redis.Options{
-        Addr:	  "localhost:6379",
-        Password: "", // no password set
-        DB:		  0,  // use default DB
-    })
-    r := mux.NewRouter()
-    fs := http.FileServer(http.Dir("uploads"))
-    r.PathPrefix("/uploads/").Handler(http.StripPrefix("/uploads/", fs))
+	client := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+	r := mux.NewRouter()
+	fs := http.FileServer(http.Dir("uploads"))
+	r.PathPrefix("/uploads/").Handler(http.StripPrefix("/uploads/", fs))
 
-    r.HandleFunc("/getCachedImage", func(w http.ResponseWriter, r *http.Request) {
-        fileName := r.URL.Query().Get("fileName")
-        val, err := client.Get(r.Context(),fileName).Result()
-        if err != nil {
-            http.Error(w, err.Error(), http.StatusInternalServerError)
-            return
-        }
-        w.Header().Set("Content-Type", "image/png")
-        w.Write([]byte(val))
-    })
+	r.HandleFunc("/getCachedImage", func(w http.ResponseWriter, r *http.Request) {
+		fileName := r.URL.Query().Get("fileName")
+		val, err := client.Get(r.Context(), fileName).Result()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Write([]byte(val))
+	})
 
-
-
-    r.HandleFunc("/form", func(w http.ResponseWriter, r *http.Request) {
-        if r.Method != "POST" {
-            w.Write([]byte(`
+	r.HandleFunc("/form", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.Write([]byte(`
                 <html>
                     <body>
                         <form method="post" enctype="multipart/form-data">
@@ -64,77 +56,93 @@ func main() {
                     </body>
                 </html>
             `))
-            return
-        }
+			return
+		}
 
-        if err := r.ParseMultipartForm(10 << 20); err != nil {
-            http.Error(w, err.Error(), http.StatusInternalServerError)
-            return
-        }
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-        name := r.FormValue("name")
+		name := r.FormValue("name")
 
-        file, handler, err := r.FormFile("file")
-        if err != nil {
-            http.Error(w, err.Error(), http.StatusInternalServerError)
-            return
-        }
-        defer file.Close()
+		file, handler, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
 
-        fileName := "uploads/" + name + "-" + randSeq(8) + "-" + fmt.Sprintf("%d", time.Now().Unix()) + "." +strings.Split(handler.Filename, ".")[1]
-        f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0666)
-        if err != nil {
-            http.Error(w, err.Error(), http.StatusInternalServerError)
-            return
-        }
-        defer f.Close()
-        io.Copy(f, file)
+		fileName := "uploads/" + name + "-" + randSeq(8) + "-" + fmt.Sprintf("%d", time.Now().Unix()) + "." + strings.Split(handler.Filename, ".")[1]
+		f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0666)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer f.Close()
+		io.Copy(f, file)
 
-        scaledFileName := strings.Split(fileName, ".")[0] + "-64x64." + strings.Split(fileName, ".")[1]
-        quantizedFileName := strings.Split(fileName, ".")[0] + "-quantized." + strings.Split(fileName, ".")[1]
+		scaledFileName := strings.Split(fileName, ".")[0] + "-64x64." + strings.Split(fileName, ".")[1]
+		quantizedFileName := strings.Split(fileName, ".")[0] + "-quantized." + strings.Split(fileName, ".")[1]
 
-        task := C.makeTaskPackage(C.CString(fileName), C.CString(scaledFileName), C.CString(quantizedFileName),64, 64)
+        scaleTask := fmt.Sprintf("s:%s:%s:%d:%d:", fileName, 
+                                scaledFileName, 64, 64)
+        //quantizeTask := fmt.Sprintf("%s:%s:%d:", fileName, quantizedFileName, 8)
 
-        // call the scalling service on port 8989 using sockets
-        conn, err := net.Dial("tcp", "localhost:8989")
-        if err != nil {
-            http.Error(w, err.Error(), http.StatusInternalServerError)
-            return
-        }
-    
+		// call the scalling service on port 8989 using sockets
+		host := os.Getenv("CPP_SERVICE_HOST")
+		if host == "" {
+			host = "127.0.0.1"
+		}
 
-        defer conn.Close()
+		port := os.Getenv("CPP_SERVICE_PORT")
+		if port == "" {
+			port = "8989"
+		}
 
-        encodedTask := C.encodeTask(task)
-        goEncodeTask := C.GoString(encodedTask)
+		address := net.JoinHostPort(host, port)
+		conn, err := net.Dial("tcp", address)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-        conn.Write([]byte(goEncodeTask))
+		defer conn.Close()
 
-        C.destroyTaskPackage(task)
-        C.free(unsafe.Pointer(encodedTask))
-        buf := make([]byte, 2048)
+		conn.Write([]byte(scaleTask))
+
+		buf := make([]byte, 2048)
+		conn.Read(buf)
+
+		fmt.Println("Task response: ", string(buf))
+        // The response is "OK" or same error message
+        taskSuccess := strings.Contains(string(buf), "OK")
+
+        quantizeTask := fmt.Sprintf("q:%s:%s:%d:", fileName, quantizedFileName, 8)
+        conn.Write([]byte(quantizeTask))
         conn.Read(buf)
+        fmt.Println("Task response: ", string(buf))
+		conn.Close()
 
-        taskResponse := C.decodeTaskResult(C.CString(string(buf)))
-        fmt.Println("Task sucess: ", taskResponse.SUCCESS)
-        conn.Close()
-        C.destroyTaskResult(taskResponse)
-
-        scaledFile, err := os.Open(scaledFileName)
-        if err != nil {
-            http.Error(w, err.Error(), http.StatusInternalServerError)
+        if !taskSuccess {
+            http.Error(w, "Task failed", http.StatusInternalServerError)
             return
         }
-        defer scaledFile.Close()
+		scaledFile, err := os.Open(scaledFileName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer scaledFile.Close()
 
-        scaledFileBytes := make([]byte, 64*64*3)
-        scaledFile.Read(scaledFileBytes)
-        client.Set(r.Context(), scaledFileName, scaledFileBytes, 0)
-        
-        w.Header().Set("Content-Type", "application/json")
-        w.Write([]byte(fmt.Sprintf(`{"original": "%s", "scaled": "%s", "quantized": "%s"}`, fileName, scaledFileName, quantizedFileName)))
+		scaledFileBytes := make([]byte, 64*64*3)
+		scaledFile.Read(scaledFileBytes)
+		client.Set(r.Context(), scaledFileName, scaledFileBytes, 0)
 
-    })
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(fmt.Sprintf(`{"original": "%s", "scaled": "%s", "quantized": "%s"}`, fileName, scaledFileName, quantizedFileName)))
 
-    http.ListenAndServe(":6969", r)
+	})
+
+	http.ListenAndServe(":6969", r)
 }

@@ -1,13 +1,15 @@
-CXX = g++
-CXXFLAGS = -I/usr/include/opencv4 -Wall -Wextra -O0
+CXX = gcc
+CXXFLAGS = -Wall -Wextra -O3 -g
 AR = ar
 ARFLAGS = rcs
 GO = go
 
 CPP_DIR = cpp-processing-service
 GO_DIR = go-html-service
+OPENCV_DIR = opencv
+DEPENDENCIES_DIR = dependencies
 
-LIBS = -L./$(CPP_DIR) -l:libprocessing.a -l:libtask.a -L/usr/lib -lopencv_core -lopencv_imgproc -lopencv_imgcodecs
+LIBS = -L./$(CPP_DIR) -l:libprocessing.a -lstdc++ -L$(DEPENDENCIES_DIR) -l:libpng16.a -lz -lm
 TARGETS = $(GO_DIR)/main $(CPP_DIR)/server
 
 .PHONY: all clean uploads
@@ -15,21 +17,15 @@ TARGETS = $(GO_DIR)/main $(CPP_DIR)/server
 all: $(TARGETS)
 
 $(CPP_DIR)/server: $(CPP_DIR)/server.cpp $(CPP_DIR)/libprocessing.a
-	$(CXX) $^ $(CXXFLAGS) $(LIBS) -o $@
+	$(CXX) $^ -static $(CXXFLAGS) $(LIBS) -o $@
 
 $(CPP_DIR)/libprocessing.a: $(CPP_DIR)/processing.o
 	$(AR) $(ARFLAGS) $@ $^
 
-$(CPP_DIR)/libtask.a: $(CPP_DIR)/task.o
-	$(AR) $(ARFLAGS) $@ $^
-
-$(CPP_DIR)/task.o: $(CPP_DIR)/task.c
-	cc -c $(CPP_DIR)/task.c -o $(CPP_DIR)/task.o
-
 $(CPP_DIR)/%.o: $(CPP_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(GO_DIR)/main: $(GO_DIR)/main.go $(CPP_DIR)/libprocessing.a $(CPP_DIR)/libtask.a uploads
+$(GO_DIR)/main: $(GO_DIR)/main.go $(CPP_DIR)/libprocessing.a uploads
 	cd $(GO_DIR) && \
 	$(GO) mod tidy && \
 	$(GO) build -o main main.go

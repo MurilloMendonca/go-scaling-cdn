@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  go-html-service:
+    image: go-html-service-image
+    environment:
+      CPP_SERVICE_HOST: cpp-processing-service
+      CPP_SERVICE_PORT: 8989
+    build:
+      context: ./go-html-service
+      dockerfile: Dockerfile
+    ports:
+      - "6969:6969"
+    volumes:
+      - uploads:/app/uploads
+
+  cpp-processing-service:
+    image: cpp-processing-service-image
+    build:
+      context: ./cpp-processing-service
+      dockerfile: Dockerfile
+    ports:
+      - "8989:8989"
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  uploads:
