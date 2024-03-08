@@ -1,4 +1,3 @@
 *.o
-*.a
 main
 go.sum
