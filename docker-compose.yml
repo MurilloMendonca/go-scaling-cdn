@@ -6,6 +6,8 @@ services:
     environment:
       CPP_SERVICE_HOST: cpp-processing-service
       CPP_SERVICE_PORT: 8989
+      REDIS_SERVICE_HOST: redis
+      REDIS_SERVICE_PORT: 6379
     build:
       context: ./go-html-service
       dockerfile: Dockerfile
@@ -13,6 +15,9 @@ services:
       - "6969:6969"
     volumes:
       - uploads:/app/uploads
+    depends_on:
+      - cpp-processing-service
+      - redis
 
   cpp-processing-service:
     image: cpp-processing-service-image
@@ -23,6 +28,14 @@ services:
       - "8989:8989"
     volumes:
       - uploads:/app/uploads
+    depends_on:
+      - redis
+
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
 
 volumes:
   uploads:
+

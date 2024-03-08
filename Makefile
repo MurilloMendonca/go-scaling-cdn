@@ -37,3 +37,7 @@ clean:
 	rm -f $(TARGETS) $(CPP_DIR)/*.a $(CPP_DIR)/*.o
 	cd $(GO_DIR) && $(GO) clean
 
+cleanall: clean
+	rm -rf uploads
+	rm -f $(GO_DIR)/go.sum
+
