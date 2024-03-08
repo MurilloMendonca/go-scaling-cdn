@@ -11,7 +11,25 @@ using Color = std::array<u_int8_t, 4>;
 using Mat = std::vector<std::vector<Color>>;
 using Error = std::string;
 using Success = bool;
+// Public API ###############################################################
+bool scaleImage(const char *imagePath, const char *newImagePath, int newWidth, int newHeight);
+bool quantizeImage(const char *imagePath, const char *newImagePath, int N);
+// #########################################################################
 
+// Private API ##############################################################
+// K-means clustering algorithm
+void initializeCenter(Color &center, const Mat &image);
+int distanceSquared(const Color& a, const Color& b);
+size_t findClosestCenterIndex(const std::vector<Color>& centers, const Color& color);
+void updateCenter(Color& center, const std::vector<Color>& assignedColors);
+Color calculateMeanColor(const Mat& image, int startX, int startY, int endX, int endY);
+void runKmeans(Mat& image, int K, int N);
+// PNG file I/O - Depends on libpng
+std::variant<Mat, Error> readPng(const char *imagePath);
+std::variant<Success, Error> writePng(const char *imagePath, const Mat &image);
+// Image processing
+Mat resize(Mat image, int newWidth, int newHeight);
+// #########################################################################
 
 void initializeCenter(Color &center, const Mat &image) {
   int width = image[0].size();
@@ -31,10 +49,10 @@ int distanceSquared(const Color& a, const Color& b) {
 }
 
 // Find the index of the closest center to a given color
-int findClosestCenterIndex(const std::vector<Color>& centers, const Color& color) {
+size_t findClosestCenterIndex(const std::vector<Color>& centers, const Color& color) {
     int minDistance = std::numeric_limits<int>::max();
-    int index = 0;
-    for (int i = 0; i < centers.size(); ++i) {
+    size_t index = 0;
+    for (size_t i = 0; i < centers.size(); ++i) {
         int dist = distanceSquared(color, centers[i]);
         if (dist < minDistance) {
             minDistance = dist;
@@ -72,7 +90,7 @@ void runKmeans(Mat& image, int K, int N) {
         // Assign pixels to the nearest center
         for (const auto& row : image) {
             for (const auto& pixel : row) {
-                int centerIndex = findClosestCenterIndex(centers, pixel);
+                size_t centerIndex = findClosestCenterIndex(centers, pixel);
                 clusters[centerIndex].push_back(pixel);
             }
         }

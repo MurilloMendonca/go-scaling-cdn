@@ -1,6 +1,6 @@
+#define DEBUG 1
 #include "processing.h"
 #include <arpa/inet.h>
-#include <optional>
 #include <string>
 #include <sys/socket.h>
 #include <thread>
@@ -20,38 +20,48 @@ struct QuantizeTask {
   int levels;
 };
 
-struct TaskResult {};
-
 using Error = std::string;
+using TaskOrError = std::variant<ScaleTask, QuantizeTask, Error>;
+
+TaskOrError parseTask(const std::string &buffer);
+int openSocket(int port);
+int acceptConnection(int serverSocket);
+TaskOrError receiveTask(int clientSocket);
+bool processTask(TaskOrError task);
+bool sendResult(int clientSocket, std::string result);
+void handleClient(int clientSocket);
+
+
+
+
 
 // The task package is a string of the form:
 //<task_type>:<task_data>:
 // where task_type is either 's' for scale or 'q' for quantize
-std::variant<ScaleTask, QuantizeTask, Error>
-parseTask(const std::string &buffer) {
+TaskOrError parseTask(const std::string &buffer) {
 
   if (buffer.size() < 3) {
-    return "Invalid task: too short";
+    return Error("Invalid task: too short");
   }
 
   if (buffer[1] != ':') {
-    return "Invalid task: missing colon on position 1";
+    return Error("Invalid task: missing colon on position 1");
   }
 
   if (buffer[0] == 's') {
     auto colonPos = buffer.find(':', 2);
     if (colonPos == std::string::npos) {
-      return "Invalid task: missing colon on position 2 for scale task";
+      return Error("Invalid task: missing colon on position 2 for scale task");
     }
 
     auto colonPos2 = buffer.find(':', colonPos + 1);
     if (colonPos2 == std::string::npos) {
-      return "Invalid task: missing colon on position 3 for scale task";
+      return Error("Invalid task: missing colon on position 3 for scale task");
     }
 
     auto colonPos3 = buffer.find(':', colonPos2 + 1);
     if (colonPos3 == std::string::npos) {
-      return "Invalid task: missing colon on position 4 for scale task";
+      return Error("Invalid task: missing colon on position 4 for scale task");
     }
 
     auto imagePath = buffer.substr(2, colonPos - 2);
@@ -66,17 +76,17 @@ parseTask(const std::string &buffer) {
       //quantize task example: "q:/path/to/image:/path/to/quantized/image:256:"
     auto imagePathEnd = buffer.find(':', 2);
     if (imagePathEnd == std::string::npos) {
-      return "Invalid task: missing colon on position 2 for quantize task";
+      return Error("Invalid task: missing colon on position 2 for quantize task");
     }
 
     auto quantizedImagePathEnd = buffer.find(':', imagePathEnd + 1);
     if (quantizedImagePathEnd == std::string::npos) {
-      return "Invalid task: missing colon on position 3 for quantize task";
+      return Error("Invalid task: missing colon on position 3 for quantize task");
     }
 
     auto levelsEnd = buffer.find(':', quantizedImagePathEnd + 1);
     if (levelsEnd == std::string::npos) {
-      return "Invalid task: missing colon on position 4 for quantize task";
+      return Error("Invalid task: missing colon on position 4 for quantize task");
     }
 
     auto imagePath = buffer.substr(2, imagePathEnd - 2);
@@ -86,11 +96,10 @@ parseTask(const std::string &buffer) {
 
     return QuantizeTask{imagePath, quantizedImagePath, levels};
   } else {
-    return "Invalid task";
+    return Error("Invalid task");
   }
 }
 
-#define DEBUG 1
 int openSocket(int port) {
   int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
   if (serverSocket < 0) {
@@ -121,7 +130,7 @@ int acceptConnection(int serverSocket) {
                 &clientAddressLength);
 }
 
-std::variant<ScaleTask, QuantizeTask, Error> receiveTask(int clientSocket) {
+TaskOrError receiveTask(int clientSocket) {
   char buffer[2048];
   int bytesRead = recv(clientSocket, buffer, 2048, 0);
   if (bytesRead < 0) {
@@ -135,7 +144,7 @@ std::variant<ScaleTask, QuantizeTask, Error> receiveTask(int clientSocket) {
   return parseTask(buff);
 }
 
-bool processTask(std::variant<ScaleTask, QuantizeTask, Error> task) {
+bool processTask(TaskOrError task) {
   bool status = true;
   if (std::holds_alternative<ScaleTask>(task)) {
     auto scaleTask = std::get<ScaleTask>(task);
