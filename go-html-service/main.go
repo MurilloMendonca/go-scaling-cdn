@@ -122,6 +122,13 @@ func main() {
         conn.Write([]byte(quantizeTask))
         conn.Read(buf)
         fmt.Println("Task response: ", string(buf))
+
+        //also scale the quantized image
+        scaledQuantizedFileName := strings.Split(quantizedFileName, ".")[0] + "-64x64." + strings.Split(quantizedFileName, ".")[1]
+        scaleTask = fmt.Sprintf("s:%s:%s:%d:%d:", quantizedFileName, scaledQuantizedFileName, 64, 64)
+        conn.Write([]byte(scaleTask))
+        conn.Read(buf)
+        fmt.Println("Task response: ", string(buf))
 		conn.Close()
 
         if !taskSuccess {

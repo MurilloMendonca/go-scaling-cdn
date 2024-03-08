@@ -1,7 +1,6 @@
 #include "processing.h"
 #include <array>
 #include <limits>
-#include <queue>
 #include <string>
 #include <sys/types.h>
 #include <variant>
@@ -13,54 +12,6 @@ using Mat = std::vector<std::vector<Color>>;
 using Error = std::string;
 using Success = bool;
 
-// Get the K closest colors to a given color in an image
-// TODO: Optimize the hell out of this
-std::vector<Color> getKClosestColors(const Mat &image, int K,
-                                     const Color &center) {
-  struct ColorDistance {
-    Color color;
-    float distance;
-  };
-  auto compare = [](const ColorDistance &a, const ColorDistance &b) {
-    return a.distance < b.distance;
-  };
-  std::priority_queue<ColorDistance, std::vector<ColorDistance>,
-                      decltype(compare)>
-      closestColors(compare);
-
-  for (int i = 0; i < image.size(); i++) {
-    for (int j = 0; j < image[0].size(); j++) {
-      Color pixel = image[i][j];
-      float distance = 0;
-      for (int k = 0; k < 4; k++) {
-        distance += (center[k] - pixel[k]) * (center[k] - pixel[k]);
-      }
-      closestColors.push({pixel, distance});
-      if (closestColors.size() > K) {
-        closestColors.pop();
-      }
-    }
-  }
-
-  std::vector<Color> result;
-  for (int i = 0; i < K; i++) {
-    ColorDistance closest = closestColors.top();
-    closestColors.pop();
-    result.push_back(closest.color);
-  }
-
-  return result;
-}
-
-void updateCenter(Color &center, const std::vector<Color> &closestColors) {
-  for (int i = 0; i < 4; i++) {
-    int sum = 0;
-    for (int j = 0; j < closestColors.size(); j++) {
-      sum += closestColors[j][i];
-    }
-    center[i] = sum / closestColors.size();
-  }
-}
 
 void initializeCenter(Color &center, const Mat &image) {
   int width = image[0].size();
@@ -70,43 +21,75 @@ void initializeCenter(Color &center, const Mat &image) {
   center = image[y][x];
 }
 
-Color getClosestCenter(const std::vector<Color> &centers, const Color &pixel) {
-  float minDistance = std::numeric_limits<float>::max();
-  Color closestCenter;
-  for (int i = 0; i < centers.size(); i++) {
-    float distance = 0;
-    for (int j = 0; j < 4; j++) {
-      distance += (centers[i][j] - pixel[j]) * (centers[i][j] - pixel[j]);
+
+int distanceSquared(const Color& a, const Color& b) {
+    int distance = 0;
+    for (int i = 0; i < 4; ++i) {
+        distance += (a[i] - b[i]) * (a[i] - b[i]);
     }
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestCenter = centers[i];
-    }
-  }
-  return closestCenter;
+    return distance;
 }
 
-void runKmeans(Mat &image, int K, int N) {
-  std::vector<Color> centers(K);
-  for (int i = 0; i < K; i++) {
-    initializeCenter(centers[i], image);
-  }
-
-  int iterations = 0;
-  while (iterations < N) {
-    for (int i = 0; i < K; i++) {
-      std::vector<Color> closestColors =
-          getKClosestColors(image, K, centers[i]);
-      updateCenter(centers[i], closestColors);
+// Find the index of the closest center to a given color
+int findClosestCenterIndex(const std::vector<Color>& centers, const Color& color) {
+    int minDistance = std::numeric_limits<int>::max();
+    int index = 0;
+    for (int i = 0; i < centers.size(); ++i) {
+        int dist = distanceSquared(color, centers[i]);
+        if (dist < minDistance) {
+            minDistance = dist;
+            index = i;
+        }
     }
-    iterations++;
-  }
+    return index;
+}
 
-  for (int i = 0; i < image.size(); i++) {
-    for (int j = 0; j < image[0].size(); j++) {
-      image[i][j] = getClosestCenter(centers, image[i][j]);
+// Update the center to be the mean of all colors assigned to it
+void updateCenter(Color& center, const std::vector<Color>& assignedColors) {
+    if (assignedColors.empty()) return;
+
+    std::array<long, 4> sum = {0, 0, 0, 0};
+    for (const auto& color : assignedColors) {
+        for (int i = 0; i < 4; ++i) {
+            sum[i] += color[i];
+        }
     }
-  }
+
+    for (int i = 0; i < 4; ++i) {
+        center[i] = sum[i] / assignedColors.size();
+    }
+}
+
+void runKmeans(Mat& image, int K, int N) {
+    std::vector<Color> centers(K);
+    for (int i = 0; i < K; ++i) {
+        initializeCenter(centers[i], image);
+    }
+
+    for (int iteration = 0; iteration < N; ++iteration) {
+        std::vector<std::vector<Color>> clusters(K); // Each cluster holds assigned colors
+
+        // Assign pixels to the nearest center
+        for (const auto& row : image) {
+            for (const auto& pixel : row) {
+                int centerIndex = findClosestCenterIndex(centers, pixel);
+                clusters[centerIndex].push_back(pixel);
+            }
+        }
+
+        // Update centers
+        for (int i = 0; i < K; ++i) {
+            updateCenter(centers[i], clusters[i]);
+        }
+    }
+
+    // Optionally: Assign pixels in the image to their cluster's center color
+    for (auto& row : image) {
+        for (auto& pixel : row) {
+            int centerIndex = findClosestCenterIndex(centers, pixel);
+            pixel = centers[centerIndex];
+        }
+    }
 }
 
 std::variant<Mat, Error> readPng(const char *imagePath) {
