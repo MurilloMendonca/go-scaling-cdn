@@ -14,6 +14,7 @@ using Error = std::string;
 using Success = bool;
 
 // Get the K closest colors to a given color in an image
+// TODO: Optimize the hell out of this
 std::vector<Color> getKClosestColors(const Mat &image, int K,
                                      const Color &center) {
   struct ColorDistance {
