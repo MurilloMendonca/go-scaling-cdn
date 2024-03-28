@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/redis/go-redis/v9"
 	"io"
 	"math/rand"
 	"net"
@@ -11,6 +9,9 @@ import (
 	"os"
 	"strings"
 	"time"
+    "net/url"
+	"github.com/gorilla/mux"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -63,7 +64,8 @@ func randSeq(n int) string {
 
 func getCachedImageHandler(client *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fileName := r.URL.Query().Get("fileName")
+        fileName := r.URL.Query().Get("fileName")
+        fmt.Println("Getting file from cache: ", fileName)
 		val, err := client.Get(r.Context(), fileName).Result()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -181,10 +183,16 @@ func processImage(w http.ResponseWriter, r *http.Request, fileName string, clien
 
     // Send back a JSON response with the file names
     w.Header().Set("Content-Type", "application/json")
-    w.Write([]byte(fmt.Sprintf(`{"original": "%s", "scaled": "%s", "quantized": "%s"}`, fileName, scaledFileName, quantizedFileName)))
+    w.Write([]byte(fmt.Sprintf(`{"original": "%s", "scaled": "%s", "quantized": "%s", "cached": "%s"}`, 
+                    fileName, 
+                    scaledFileName, 
+                    quantizedFileName,
+                    "getCachedImage?fileName="+url.QueryEscape(quantizedFileName),
+                )))
 
 
 }
+
 
 func addImageToCache(w http.ResponseWriter, r *http.Request, fileName string, client *redis.Client) {
     f, err := os.Open(fileName)
